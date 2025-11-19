@@ -213,11 +213,42 @@ def show_ui(df_centros):
         
         st.divider()
         st.subheader("Usuarios Existentes")
+        users_df = pd.DataFrame()
         try:
             users_df = database.get_all_users()
             st.dataframe(users_df, use_container_width=True)
         except Exception as e:
             st.error(f"Error al cargar usuarios: {e}")
+        
+        st.subheader("Cambiar Contraseña de Usuario")
+        try:
+            if not users_df.empty:
+                users_list = users_df.to_dict('records')
+                user_options = {u['id']: f"{u['full_name']} ({u['username']})" for u in users_list}
+                selected_user_id = st.selectbox("Seleccione el usuario:", options=list(user_options.keys()), format_func=lambda x: user_options[x])
+                colp1, colp2 = st.columns(2)
+                with colp1:
+                    new_password = st.text_input("Nueva contraseña", type="password")
+                with colp2:
+                    new_password_confirm = st.text_input("Confirmar contraseña", type="password")
+
+                if st.button("Cambiar Contraseña"):
+                    if not new_password or not new_password_confirm:
+                        st.error("Ambos campos de contraseña son requeridos.")
+                    elif new_password != new_password_confirm:
+                        st.error("Las contraseñas no coinciden.")
+                    elif len(new_password) < 8:
+                        st.error("La contraseña debe tener al menos 8 caracteres.")
+                    else:
+                        success, message = database.change_user_password(selected_user_id, new_password)
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+            else:
+                st.info("No hay usuarios para modificar.")
+        except Exception as e:
+            st.error(f"Error al intentar cambiar contraseña: {e}")
 
     # --- 6. REVISIÓN DE ENVÍOS ---
     with tab_review:

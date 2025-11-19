@@ -2,6 +2,8 @@
 import pandas as pd
 import database
 import json
+import base64
+import streamlit.components.v1 as components
 from streamlit_folium import st_folium
 from streamlit_drawable_canvas import st_canvas
 
@@ -90,9 +92,17 @@ def _render_form_from_structure(structure):
         
         elif field_type == "Carga de Imagen":
             st.subheader(display_label)
-            uploaded_file = st.file_uploader(display_label, type=["png", "jpg", "jpeg"], key=field_key)
-            if uploaded_file:
-                form_data[label] = uploaded_file.name
+            uploaded_files = st.file_uploader(display_label, type=["png", "jpg", "jpeg"], key=field_key, accept_multiple_files=True)
+            images_list = []
+            if uploaded_files:
+                for uf in uploaded_files:
+                    try:
+                        raw = uf.read()
+                        encoded = base64.b64encode(raw).decode('utf-8')
+                        images_list.append({"filename": uf.name, "content_base64": encoded, "type": uf.type})
+                    except Exception:
+                        images_list.append({"filename": getattr(uf, 'name', 'unknown'), "content_base64": None, "type": getattr(uf, 'type', None)})
+                form_data[label] = images_list
             else:
                 form_data[label] = None
                 
@@ -106,6 +116,49 @@ def _validate_form(form_data, structure):
             if form_data[label] is None or (isinstance(form_data[label], str) and not form_data[label].strip()):
                 return False, f"El campo '{label}' es requerido."
     return True, ""
+
+
+def _build_print_html(form_data, title="Formulario"):
+    """Construye un HTML sencillo con los datos del formulario para impresión."""
+    parts = [f"<h1>{title}</h1>", "<style>body{font-family:Arial,Helvetica,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px;vertical-align:top}th{background:#f4f4f4;text-align:left}</style>"]
+    parts.append("<table>")
+    for key, val in form_data.items():
+        parts.append("<tr>")
+        parts.append(f"<th>{key}</th>")
+        # Manejar distintos tipos de valor
+        if val is None:
+            display = "<em>(vacío)</em>"
+        elif isinstance(val, list):
+            # Si es lista de imágenes (diccionarios con base64)
+            if val and isinstance(val[0], dict) and 'content_base64' in val[0]:
+                imgs = []
+                for im in val:
+                    if im.get('content_base64'):
+                        mime = im.get('type') or 'image/png'
+                        imgs.append(f"<div style='margin-bottom:8px'><strong>{im.get('filename')}</strong><br><img src=\"data:{mime};base64,{im.get('content_base64')}\" style='max-width:400px;max-height:300px;'/></div>")
+                    else:
+                        imgs.append(f"<div><strong>{im.get('filename')}</strong> (no disponible)</div>")
+                display = "".join(imgs)
+            else:
+                # tabla o lista de filas -> representar en JSON legible
+                try:
+                    display = "<pre>" + json.dumps(val, ensure_ascii=False, indent=2) + "</pre>"
+                except Exception:
+                    display = str(val)
+        elif isinstance(val, dict):
+            try:
+                display = "<pre>" + json.dumps(val, ensure_ascii=False, indent=2) + "</pre>"
+            except Exception:
+                display = str(val)
+        else:
+            display = str(val)
+
+        parts.append(f"<td>{display}</td>")
+        parts.append("</tr>")
+    parts.append("</table>")
+    # Script para lanzar el diálogo de impresión al cargar el iframe
+    parts.append("<script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>")
+    return "".join(parts)
 
 
 def show_ui(df_centros):
@@ -224,6 +277,14 @@ def show_ui(df_centros):
             else:
                 submitted = False
                 form_data = {}
+            # Botón para previsualizar / imprimir (fuera del form para que no interfiera con el submit)
+            if form_structure and form_data:
+                if st.button("🖨️ Previsualizar / Imprimir formulario", key="btn_preview_print"):
+                    try:
+                        printable = _build_print_html(form_data, template_options.get(selected_template_id, "Formulario"))
+                        components.html(printable, height=700, scrolling=True)
+                    except Exception as e:
+                        st.error(f"Error generando vista imprimible: {e}")
             
             if submitted:
                 is_valid, error_message = _validate_form(form_data, form_structure)

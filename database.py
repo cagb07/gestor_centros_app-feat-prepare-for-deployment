@@ -179,6 +179,22 @@ def create_user(username, password, role, full_name):
         return False, "El usuario ya existe."
     # Sin conn.close()
 
+def change_user_password(user_id, new_password):
+    """Actualiza la contraseña de un usuario dado su id."""
+    from auth import hash_password
+    hashed = hash_password(new_password)
+    conn = get_db_connection()
+    if not conn:
+        return False, "No hay conexión a la base de datos."
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE usuarios SET password_hash = %s WHERE id = %s", (hashed, user_id))
+        conn.commit()
+        return True, "Contraseña actualizada." 
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error al actualizar contraseña: {e}"
+
 def get_all_users():
     conn = get_db_connection()
     if not conn:
