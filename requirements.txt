@@ -1,0 +1,6 @@
+﻿streamlit
+pandas
+psycopg2-binary
+Werkzeug
+streamlit-drawable-canvas
+streamlit-folium
