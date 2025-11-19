@@ -63,10 +63,10 @@ def _render_form_from_structure(structure):
         elif field_type == "Geolocalización":
             st.subheader(display_label)
             map_center = [9.9333, -84.0833] # Centrar en Costa Rica
-            map_data = st_folium(center=map_center, zoom=7, key=field_key, width=700, height=400)
+            map_data = st_folium(fig=None, center=map_center, zoom=7, key=field_key, width=700, height=400)
             
             coords = None
-            if map_data.get("last_clicked"):
+            if map_data and map_data.get("last_clicked"):
                 coords = map_data["last_clicked"]
                 st.write(f"Coordenadas: {coords['lat']:.6f}, {coords['lng']:.6f}")
             form_data[label] = coords
@@ -212,14 +212,18 @@ def show_ui(df_centros):
                 if not form_structure:
                     st.error("No se pudo cargar la estructura de este formulario.")
                     form_structure = None
-                
-            with st.form("dynamic_form"):
-                st.subheader(template_options[selected_template_id])
-                
-                # Renderizar todos los campos
-                form_data = _render_form_from_structure(form_structure)
-                
-                submitted = st.form_submit_button("✅ Enviar Formulario")
+            
+            if form_structure:
+                with st.form("dynamic_form"):
+                    st.subheader(template_options[selected_template_id])
+                    
+                    # Renderizar todos los campos
+                    form_data = _render_form_from_structure(form_structure)
+                    
+                    submitted = st.form_submit_button("✅ Enviar Formulario")
+            else:
+                submitted = False
+                form_data = {}
             
             if submitted:
                 is_valid, error_message = _validate_form(form_data, form_structure)
