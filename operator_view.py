@@ -338,8 +338,8 @@ def show_ui(df_centros):
                         label = field["Etiqueta del Campo"]
                         field_key = f"form_field_{label.replace(' ', '_')}"
                         gps_session_key = f"{field_key}_gps"
-                        
-                        col1, col2 = st.columns([3, 1])
+
+                        col1, col2, col3 = st.columns([3, 1, 1])
                         with col1:
                             st.write(f"**{label}**")
                         with col2:
@@ -366,7 +366,11 @@ def show_ui(df_centros):
                                         st.error(f"Error parseando coordenadas: {e}")
                                 else:
                                     st.warning("⚠️ No se obtuvo ubicación. Verifica permisos del navegador.")
-                        
+                        with col3:
+                            if st.session_state.get(gps_session_key):
+                                if st.button("🗑️ Limpiar", key=f"btn_clear_gps_{field_key}", use_container_width=True):
+                                    del st.session_state[gps_session_key]
+
                         # Mostrar coordenadas actuales si existen
                         if st.session_state.get(gps_session_key):
                             coords = st.session_state[gps_session_key]
