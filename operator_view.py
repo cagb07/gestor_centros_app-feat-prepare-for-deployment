@@ -453,28 +453,27 @@ def show_ui(df_centros):
                                 st.info("El método 'Usar mi ubicación' no está disponible en este despliegue. Usa el mapa o introduce coordenadas manualmente abajo.")
 
                             if st.button(f"📍 Capturar", key=f"btn_gps_out_{field_key}", use_container_width=True):
-                                js_code = (
-                                    "new Promise((resolve, reject) => {"
-                                    "navigator.geolocation.getCurrentPosition("
-                                    "p => resolve(JSON.stringify({lat: p.coords.latitude, lng: p.coords.longitude})) ,"
-                                    "e => reject(e.message), {enableHighAccuracy:true});"
-                                    "})"
-                                )
-                                try:
-                                    gps_res = st_javascript(js_code, key=f"js_geo_out_{field_key}")
-                                except RuntimeError as re:
-                                    st.error(str(re))
+                                # Intentar abrir modal con postMessage (más fiable en algunos navegadores)
+                                if ST_JAVASCRIPT_AVAILABLE:
+                                    modal_res = show_geo_modal(label, field_key)
                                     gps_res = None
-
-                                if gps_res:
-                                    try:
-                                        gps_coords = json.loads(gps_res)
-                                        st.session_state[gps_session_key] = gps_coords
-                                        st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
-                                    except Exception as e:
-                                        st.error(f"Error parseando coordenadas: {e}")
+                                    if modal_res:
+                                        try:
+                                            gps_payload = json.loads(modal_res)
+                                            if gps_payload.get('error'):
+                                                st.error(f"Error GPS: {gps_payload.get('error')}")
+                                            elif gps_payload.get('closed'):
+                                                st.info("Modal cerrado por el usuario.")
+                                            else:
+                                                gps_coords = {'lat': float(gps_payload.get('lat')), 'lng': float(gps_payload.get('lng'))}
+                                                st.session_state[gps_session_key] = gps_coords
+                                                st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
+                                        except Exception as e:
+                                            st.error(f"Error parseando respuesta del modal: {e}")
+                                    else:
+                                        st.warning("⚠️ No se obtuvo ubicación desde el modal. Verifica permisos del navegador o usa la entrada manual.")
                                 else:
-                                    st.warning("⚠️ No se obtuvo ubicación. Verifica permisos del navegador.")
+                                    st.warning("El método 'Usar mi ubicación' no está disponible en este despliegue. Usa la entrada manual o el mapa.")
 
                             # Campo alternativo manual para ingresar coordenadas (útil si JS o permisos fallan)
                             manual_lat = st.text_input(f"Latitud manual — {label}", value="", key=f"manual_lat_{field_key}")
