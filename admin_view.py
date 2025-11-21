@@ -56,28 +56,45 @@ def show_ui(df_centros):
         st.subheader("📎 Adjuntar Centro a un Formulario")
         st.write("Seleccione un centro de la lista para pre-llenar sus datos en un nuevo formulario.")
 
-        lista_nombres_centros = sorted(df_centros['CENTRO_EDUCATIVO'].unique().tolist())
+        # Campo de búsqueda para filtrar centros por nombre
+        search_query = st.text_input("Buscar centro (por nombre)", key="admin_search_query")
+
+        if 'CENTRO_EDUCATIVO' in df_centros.columns:
+            lista_nombres_centros = sorted(df_centros['CENTRO_EDUCATIVO'].astype(str).unique().tolist())
+            if search_query and search_query.strip():
+                q = search_query.strip().lower()
+                lista_nombres_centros = [n for n in lista_nombres_centros if q in n.lower()]
+        else:
+            lista_nombres_centros = []
 
         centro_para_adjuntar = st.selectbox(
             "Escriba o seleccione el nombre del centro que desea adjuntar:",
             options=lista_nombres_centros,
-            index=None,
-            placeholder="Seleccione un centro...",
+            index=0 if lista_nombres_centros else None,
             key="admin_attach_selectbox"
         )
 
         if st.button("Adjuntar Centro Seleccionado", key="btn_adjuntar_admin"):
             if centro_para_adjuntar:
-                datos_centro_seleccionado = df_centros[
-                    df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar
-                ].iloc[0]
-                
-                st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
-                
-                st.success(f"¡{centro_para_adjuntar} adjuntado!")
-                st.info("Los datos se pre-llenarán en la pestaña 'Llenar Formulario' (vista de Operador).")
+                try:
+                    datos_centro_seleccionado = df_centros[df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar].iloc[0]
+                    st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
+                    st.success(f"¡{centro_para_adjuntar} adjuntado!")
+                    st.info("Los datos se pre-llenarán en la pestaña 'Llenar Formulario' (vista de Operador).")
+                except Exception:
+                    st.error("No se pudo adjuntar el centro seleccionado. Revisa el nombre o el CSV de centros.")
             else:
                 st.warning("Por favor, seleccione un centro de la lista.")
+
+        # Mostrar preview del centro seleccionado
+        if 'admin_attach_selectbox' in st.session_state and st.session_state.admin_attach_selectbox:
+            try:
+                preview = df_centros[df_centros['CENTRO_EDUCATIVO'] == st.session_state.admin_attach_selectbox]
+                if not preview.empty:
+                    st.subheader("Vista previa del centro seleccionado")
+                    st.write(preview.iloc[0].to_dict())
+            except Exception:
+                pass
 
     # --- 3. CREADOR DE FORMULARIOS ---
     with tab_creator:

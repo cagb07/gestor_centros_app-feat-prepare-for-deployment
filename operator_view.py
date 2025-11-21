@@ -4,11 +4,16 @@ import database
 import json
 import base64
 import streamlit.components.v1 as components
+from typing import Any, NoReturn
 try:
-    from streamlit_javascript import st_javascript
+    import importlib
+    module = importlib.import_module("streamlit_javascript")
+    st_javascript = getattr(module, "st_javascript")
+    if not callable(st_javascript):
+        raise ImportError("streamlit_javascript.st_javascript no es callable")
 except Exception:
     # Si la dependencia no está instalada, definimos un stub que lanza una excepción controlada
-    def st_javascript(code, key=None, timeout=5000):
+    def st_javascript(code: Any, key: Any = None, timeout: int = 5000) -> NoReturn:
         raise RuntimeError("streamlit-javascript no está instalado. Instala la dependencia para habilitar GPS via JS.")
 import folium
 from streamlit_folium import st_folium
@@ -34,10 +39,14 @@ def _render_form_from_structure(structure):
     if "centro_adjunto" in st.session_state and st.session_state.centro_adjunto:
         # Invertir el mapa para buscar fácilmente por la etiqueta del formulario
         FORM_TO_CSV_MAP = {v: k for k, v in CSV_TO_FORM_MAP.items()}
-        
+
+        # Normalizar claves del centro adjunto para evitar problemas de mayúsculas/minúsculas
+        centro_dict = {str(k).upper(): v for k, v in st.session_state.centro_adjunto.items()}
+
         for form_label, csv_col in FORM_TO_CSV_MAP.items():
-            if csv_col in st.session_state.centro_adjunto:
-                prefill_data[form_label] = st.session_state.centro_adjunto[csv_col]
+            # csv_col viene en mayúsculas en el mapeo
+            if csv_col and str(csv_col).upper() in centro_dict:
+                prefill_data[form_label] = centro_dict[str(csv_col).upper()]
     # --- FIN LÓGICA PRE-LLENADO ---
 
     for field in structure:
@@ -219,28 +228,46 @@ def show_ui(df_centros):
         st.subheader("📎 Adjuntar Centro a un Formulario")
         st.write("Seleccione un centro de la lista para pre-llenar sus datos en un nuevo formulario.")
 
-        lista_nombres_centros = sorted(df_centros['CENTRO_EDUCATIVO'].unique().tolist())
+        # Campo de búsqueda para filtrar centros por nombre
+        search_query = st.text_input("Buscar centro (por nombre)", key="operator_search_query")
+
+        if 'CENTRO_EDUCATIVO' in df_centros.columns:
+            lista_nombres_centros = sorted(df_centros['CENTRO_EDUCATIVO'].astype(str).unique().tolist())
+            if search_query and search_query.strip():
+                lower_q = search_query.strip().lower()
+                lista_nombres_centros = [n for n in lista_nombres_centros if lower_q in n.lower()]
+        else:
+            lista_nombres_centros = []
 
         centro_para_adjuntar = st.selectbox(
             "Escriba o seleccione el nombre del centro que desea adjuntar:",
             options=lista_nombres_centros,
-            index=None,
-            placeholder="Seleccione un centro...",
+            index=0 if lista_nombres_centros else None,
+            format_func=lambda x: x,
             key="operator_attach_selectbox"
         )
 
         if st.button("Adjuntar Centro Seleccionado", key="btn_adjuntar_operator"):
             if centro_para_adjuntar:
-                datos_centro_seleccionado = df_centros[
-                    df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar
-                ].iloc[0]
-                
-                st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
-                
-                st.success(f"¡{centro_para_adjuntar} adjuntado!")
-                st.info("Ahora vaya a la pestaña 'Llenar Formulario' para ver la información pre-llenada.")
+                try:
+                    datos_centro_seleccionado = df_centros[df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar].iloc[0]
+                    st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
+                    st.success(f"¡{centro_para_adjuntar} adjuntado!")
+                    st.info("Ahora vaya a la pestaña 'Llenar Formulario' para ver la información pre-llenada.")
+                except Exception:
+                    st.error("No se pudo adjuntar el centro seleccionado. Revisa el nombre o el CSV de centros.")
             else:
-                st.warning("Por favor, seleccione un centro de la lista.")
+                st.warning("Por favor, selecciona un centro de la lista.")
+
+        # Mostrar preview del centro seleccionado (si existe)
+        if 'operator_attach_selectbox' in st.session_state and st.session_state.operator_attach_selectbox:
+            try:
+                preview = df_centros[df_centros['CENTRO_EDUCATIVO'] == st.session_state.operator_attach_selectbox]
+                if not preview.empty:
+                    st.subheader("Vista previa del centro seleccionado")
+                    st.write(preview.iloc[0].to_dict())
+            except Exception:
+                pass
 
     # --- 2. LLENAR FORMULARIO ---
     with tab_fill_form:
