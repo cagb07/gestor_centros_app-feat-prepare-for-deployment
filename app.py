@@ -1,11 +1,6 @@
 ﻿import streamlit as st
 import pandas as pd
 import database
-            </style>
-        """, unsafe_allow_html=True)
-
-    # Navegación rápida entre vistas principales
-    st.sidebar.markdown("---")
 
 # --- APLICACIÓN PRINCIPAL (POST-LOGIN) ---
 def main_app():
