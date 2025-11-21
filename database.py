@@ -81,6 +81,26 @@ def create_tables():
 
     try:
         with conn.cursor() as cur:
+            # Tabla de Centros Educativos
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS centros (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(20) UNIQUE,
+                    nombre VARCHAR(255) NOT NULL,
+                    provincia VARCHAR(100),
+                    otros_campos JSONB
+                );
+            """)
+            # Tabla de auditoría
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auditoria (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES usuarios(id),
+                    accion VARCHAR(100) NOT NULL,
+                    detalle TEXT,
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
             # Tabla de Áreas
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS form_areas (
@@ -98,7 +118,9 @@ def create_tables():
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'operador')),
-                    full_name VARCHAR(100)
+                    full_name VARCHAR(100),
+                    failed_attempts INTEGER DEFAULT 0,
+                    is_locked BOOLEAN DEFAULT FALSE
                 );
             """)
             
@@ -136,12 +158,53 @@ def get_user(username):
     if not conn:
         return None
     with conn.cursor() as cur:
-        cur.execute("SELECT id, username, password_hash, role, full_name FROM usuarios WHERE username = %s", (username,))
+        cur.execute("SELECT id, username, password_hash, role, full_name, failed_attempts, is_locked FROM usuarios WHERE username = %s", (username,))
         user_data = cur.fetchone()
     # Sin conn.close()
     if user_data:
-        return {"id": user_data[0], "username": user_data[1], "password_hash": user_data[2], "role": user_data[3], "full_name": user_data[4]}
+        return {
+            "id": user_data[0],
+            "username": user_data[1],
+            "password_hash": user_data[2],
+            "role": user_data[3],
+            "full_name": user_data[4],
+            "failed_attempts": user_data[5],
+            "is_locked": user_data[6]
+        }
     return None
+
+def increment_failed_attempts(username):
+    conn = get_db_connection()
+    if not conn:
+        return
+    with conn.cursor() as cur:
+        cur.execute("UPDATE usuarios SET failed_attempts = failed_attempts + 1 WHERE username = %s", (username,))
+        cur.execute("SELECT failed_attempts FROM usuarios WHERE username = %s", (username,))
+        attempts = cur.fetchone()[0]
+        if attempts >= 5:
+            cur.execute("UPDATE usuarios SET is_locked = TRUE WHERE username = %s", (username,))
+    conn.commit()
+
+def reset_failed_attempts(username):
+    conn = get_db_connection()
+    if not conn:
+        return
+    with conn.cursor() as cur:
+        cur.execute("UPDATE usuarios SET failed_attempts = 0 WHERE username = %s", (username,))
+    conn.commit()
+
+def unlock_user(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return False, "No hay conexión a la base de datos."
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE usuarios SET is_locked = FALSE, failed_attempts = 0 WHERE id = %s", (user_id,))
+        conn.commit()
+        return True, "Usuario desbloqueado."
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error al desbloquear usuario: {e}"
 
 def create_admin_user(username, password, full_name):
     from auth import hash_password

@@ -15,9 +15,22 @@ except Exception:
     # Si la dependencia no está instalada, definimos un stub que lanza una excepción controlada
     def st_javascript(code: Any, key: Any = None, timeout: int = 5000) -> NoReturn:
         raise RuntimeError("streamlit-javascript no está instalado. Instala la dependencia para habilitar GPS via JS.")
-import folium
-from streamlit_folium import st_folium
-from streamlit_drawable_canvas import st_canvas
+try:
+    import folium
+except Exception:
+    folium = None
+
+try:
+    from streamlit_folium import st_folium
+except Exception:
+    def st_folium(*args, **kwargs):
+        raise RuntimeError("La dependencia 'streamlit_folium' no está instalada. Instálala para usar mapas.")
+
+try:
+    from streamlit_drawable_canvas import st_canvas
+except Exception:
+    def st_canvas(*args, **kwargs):
+        raise RuntimeError("La dependencia 'streamlit_drawable_canvas' no está instalada. Instálala para usar firmas/canvas.")
 
 # --- LÓGICA DE PRE-LLENADO ---
 # Mapeo de columnas CSV a etiquetas de formulario ESPERADAS
@@ -102,21 +115,23 @@ def _render_form_from_structure(structure):
                             coords = None
 
                 if coords:
-                    st.write(f"Coordenadas: {coords['lat']:.6f}, {coords['lng']:.6f}")
+                    st.write(f"Coordenadas del mapa: {coords['lat']:.6f}, {coords['lng']:.6f}")
                 else:
                     st.info("Haga clic en el mapa para seleccionar coordenadas.")
 
-                # Nota: no creamos botones dentro de st.form; la UI para solicitar
-                # la ubicación via GPS se renderiza fuera del formulario en show_ui.
-                # Aquí simplemente intentamos leer coordenadas registradas en
-                # session_state (por acción del botón GPS) y usamos coords por clic.
+                # Verificar si hay coordenadas capturadas por GPS (botón fuera del form)
                 gps_session_key = f"{field_key}_gps"
-                stored = st.session_state.get(gps_session_key, None)
-                if stored:
-                    form_data[label] = stored
-                else:
-                    # fallback: asignar coords (posible obtenido por clic en el mapa)
+                stored_gps = st.session_state.get(gps_session_key, None)
+                
+                # Priorizar GPS si está disponible, sino usar clic del mapa
+                if stored_gps:
+                    form_data[label] = stored_gps
+                    st.write(f"✅ **Ubicación GPS capturada:** {stored_gps['lat']:.6f}, {stored_gps['lng']:.6f}")
+                elif coords:
                     form_data[label] = coords
+                else:
+                    form_data[label] = None
+                    
             except Exception as e:
                 st.error(f"Error cargando componente de mapa: {e}")
                 form_data[label] = None
@@ -340,36 +355,53 @@ def show_ui(df_centros):
                     form_data = _render_form_from_structure(form_structure)
                     
                     submitted = st.form_submit_button("✅ Enviar Formulario")
+                
                 # Fuera del formulario: botones específicos para campos Geolocalización
                 # Iteramos la estructura para añadir botones GPS por cada campo geolocalización
+                st.divider()
+                st.subheader("⚙️ Captura de Ubicación GPS")
                 for field in form_structure:
                     if field.get("Tipo de Campo") == "Geolocalización":
                         label = field["Etiqueta del Campo"]
                         field_key = f"form_field_{label.replace(' ', '_')}"
                         gps_session_key = f"{field_key}_gps"
-                        if st.button(f"Usar mi ubicación (GPS) — {label}", key=f"btn_gps_out_{field_key}"):
-                            js_code = (
-                                "new Promise((resolve, reject) => {"
-                                "navigator.geolocation.getCurrentPosition("
-                                "p => resolve(JSON.stringify({lat: p.coords.latitude, lng: p.coords.longitude})) ,"
-                                "e => reject(e.message), {enableHighAccuracy:true});"
-                                "})"
-                            )
-                            try:
-                                gps_res = st_javascript(js_code, key=f"js_geo_out_{field_key}")
-                            except RuntimeError as re:
-                                st.error(str(re))
-                                gps_res = None
 
-                            if gps_res:
+                        col1, col2, col3 = st.columns([3, 1, 1])
+                        with col1:
+                            st.write(f"**{label}**")
+                        with col2:
+                            if st.button(f"📍 Capturar", key=f"btn_gps_out_{field_key}", use_container_width=True):
+                                js_code = (
+                                    "new Promise((resolve, reject) => {"
+                                    "navigator.geolocation.getCurrentPosition("
+                                    "p => resolve(JSON.stringify({lat: p.coords.latitude, lng: p.coords.longitude})) ,"
+                                    "e => reject(e.message), {enableHighAccuracy:true});"
+                                    "})"
+                                )
                                 try:
-                                    gps_coords = json.loads(gps_res)
-                                    st.session_state[gps_session_key] = gps_coords
-                                    st.success(f"Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
-                                except Exception as e:
-                                    st.error(f"Error parseando coordenadas: {e}")
-                            else:
-                                st.info("No se obtuvo ubicación via JS. Usa el mapa o revisa permisos del navegador.")
+                                    gps_res = st_javascript(js_code, key=f"js_geo_out_{field_key}")
+                                except RuntimeError as re:
+                                    st.error(str(re))
+                                    gps_res = None
+
+                                if gps_res:
+                                    try:
+                                        gps_coords = json.loads(gps_res)
+                                        st.session_state[gps_session_key] = gps_coords
+                                        st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
+                                    except Exception as e:
+                                        st.error(f"Error parseando coordenadas: {e}")
+                                else:
+                                    st.warning("⚠️ No se obtuvo ubicación. Verifica permisos del navegador.")
+                        with col3:
+                            if st.session_state.get(gps_session_key):
+                                if st.button("🗑️ Limpiar", key=f"btn_clear_gps_{field_key}", use_container_width=True):
+                                    del st.session_state[gps_session_key]
+
+                        # Mostrar coordenadas actuales si existen
+                        if st.session_state.get(gps_session_key):
+                            coords = st.session_state[gps_session_key]
+                            st.info(f"Coordenadas guardadas: {coords['lat']:.6f}, {coords['lng']:.6f}")
             else:
                 submitted = False
                 form_data = {}

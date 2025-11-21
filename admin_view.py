@@ -4,8 +4,93 @@ import database
 import json
 
 def show_ui(df_centros):
+    # Mostrar historial de auditoría
+    st.subheader("🕵️ Historial de acciones (auditoría)")
+    try:
+        import database as db
+        auditoria_df = db.obtener_auditoria()
+        if not auditoria_df.empty:
+            st.dataframe(auditoria_df, use_container_width=True)
+        else:
+            st.info("No hay acciones registradas en la auditoría.")
+    except Exception as e:
+        st.error(f"Error al cargar auditoría: {e}")
+
+    # Gestión avanzada de roles y permisos
+    st.subheader("🔑 Cambiar rol de usuario")
+    try:
+        users_df = pd.DataFrame()
+        try:
+            users_df = database.get_all_users()
+        except Exception:
+            pass
+        if not users_df.empty:
+            user_options_roles = {u['id']: f"{u['full_name']} ({u['username']}) - {u['role']}" for u in users_df.to_dict('records')}
+            selected_user_id_role = st.selectbox("Seleccione usuario para cambiar rol:", options=list(user_options_roles.keys()), format_func=lambda x: user_options_roles[x], key="select_user_role")
+            new_role = st.selectbox("Nuevo rol:", ["operador", "admin"], key="new_role_select")
+            if st.button("Actualizar rol", key="btn_update_role"):
+                import database as db
+                try:
+                    conn = db.get_db_connection()
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE usuarios SET role = %s WHERE id = %s", (new_role, selected_user_id_role))
+                    conn.commit()
+                    db.registrar_auditoria(
+                        st.session_state["user_id"],
+                        "cambio_rol_usuario",
+                        f"Cambio de rol para usuario ID {selected_user_id_role} a {new_role}"
+                    )
+                    st.success("Rol actualizado correctamente.")
+                    st.toast("Rol de usuario actualizado", icon="🔑")
+                except Exception as e:
+                    st.error(f"Error al actualizar rol: {e}")
+        else:
+            st.info("No hay usuarios para modificar roles.")
+    except Exception as e:
+        st.error(f"Error en la gestión de roles: {e}")
+
+    # Exportar datos filtrados
+    st.subheader("📤 Exportar datos filtrados")
+    # Asegurarse de que df_filtrado esté definido
+    filtro_nombre = st.session_state.get('filtro_nombre', '')
+    filtro_provincia = st.session_state.get('filtro_provincia', '')
+    filtro_codigo = st.session_state.get('filtro_codigo', '')
+    df_filtrado = df_centros.copy()
+    if filtro_nombre:
+        df_filtrado = df_filtrado[df_filtrado['CENTRO_EDUCATIVO'].str.contains(filtro_nombre, case=False, na=False)]
+    if filtro_provincia and 'PROVINCIA' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['PROVINCIA'].str.contains(filtro_provincia, case=False, na=False)]
+    if filtro_codigo and 'CODIGO' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['CODIGO'].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        csv = df_filtrado.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Descargar CSV",
+            data=csv,
+            file_name="centros_filtrados.csv",
+            mime="text/csv",
+            key="btn_export_csv"
+        )
+    with col_exp2:
+        try:
+            import io
+            import pandas as pd
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_filtrado.to_excel(writer, index=False, sheet_name='Centros')
+            st.download_button(
+                label="Descargar Excel",
+                data=output.getvalue(),
+                file_name="centros_filtrados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="btn_export_excel"
+            )
+        except Exception as e:
+            st.error(f"Error al exportar a Excel: {e}")
+
     st.title(f"Panel de Administrador")
-    
     tab_list = [
         "📊 Dashboard",
         "🔎 Buscador de Centros",
@@ -14,7 +99,6 @@ def show_ui(df_centros):
         "👤 Gestión de Usuarios",
         "📋 Revisión de Envíos"
     ]
-    
     tab_dashboard, tab_buscador, tab_creator, tab_areas, tab_users, tab_review = st.tabs(tab_list)
 
     # --- 1. DASHBOARD ---
@@ -50,8 +134,52 @@ def show_ui(df_centros):
     with tab_buscador:
         st.header("Consulta de Centros Educativos")
         st.info("Estos son los datos originales del archivo CSV.")
-        st.dataframe(df_centros, use_container_width=True)
-        
+
+        # Filtros y búsqueda avanzada
+        st.subheader("🔍 Filtros y búsqueda avanzada")
+        filtro_nombre = st.text_input("Buscar por nombre de centro", help="Campo accesible para lectores de pantalla", key="filtro_nombre", placeholder="Ejemplo: Liceo")
+        filtro_provincia = st.text_input("Filtrar por provincia", help="Campo accesible para lectores de pantalla", key="filtro_provincia", placeholder="Ejemplo: San José")
+        filtro_codigo = st.text_input("Filtrar por código de centro", help="Campo accesible para lectores de pantalla", key="filtro_codigo", placeholder="Ejemplo: 12345")
+
+        df_filtrado = df_centros.copy()
+        if filtro_nombre:
+            df_filtrado = df_filtrado[df_filtrado['CENTRO_EDUCATIVO'].str.contains(filtro_nombre, case=False, na=False)]
+        if filtro_provincia and 'PROVINCIA' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['PROVINCIA'].str.contains(filtro_provincia, case=False, na=False)]
+        if filtro_codigo and 'CODIGO' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['CODIGO'].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+
+        # Paginación
+        st.subheader("📄 Paginación de resultados")
+        page_size = st.selectbox("Resultados por página", [10, 25, 50, 100], index=1)
+        total_rows = len(df_filtrado)
+        total_pages = (total_rows // page_size) + int(total_rows % page_size > 0)
+        page = st.number_input("Página", min_value=1, max_value=max(1, total_pages), value=1, step=1)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        st.caption(f"Mostrando {start_idx+1} a {min(end_idx, total_rows)} de {total_rows} resultados")
+        df_pagina = df_filtrado.iloc[start_idx:end_idx]
+
+        # Edición solo para administradores
+        if st.session_state.get("role") == "admin":
+            st.warning("Como administrador puedes editar los datos de los centros. Recuerda guardar los cambios.")
+            edited_df = st.data_editor(df_filtrado, use_container_width=True, num_rows="dynamic", key="centros_editor")
+            if st.button("Guardar cambios en centros", key="btn_save_centros"):
+                try:
+                    edited_df.to_csv("datos_centros.csv", index=False)
+                    import database as db
+                    db.registrar_auditoria(
+                        st.session_state["user_id"],
+                        "edicion_centros",
+                        f"Edición de datos de centros. Filtro aplicado: nombre={filtro_nombre}, provincia={filtro_provincia}, codigo={filtro_codigo}"
+                    )
+                    st.success("Cambios guardados correctamente en 'datos_centros.csv'.")
+                    st.toast("Cambios guardados en centros", icon="✅")
+                except Exception as e:
+                    st.error(f"Error al guardar cambios: {e}")
+        else:
+            st.dataframe(df_filtrado, use_container_width=True)
+
         st.divider()
         st.subheader("📎 Adjuntar Centro a un Formulario")
         st.write("Seleccione un centro de la lista para pre-llenar sus datos en un nuevo formulario.")
@@ -76,13 +204,14 @@ def show_ui(df_centros):
 
         if st.button("Adjuntar Centro Seleccionado", key="btn_adjuntar_admin"):
             if centro_para_adjuntar:
-                try:
-                    datos_centro_seleccionado = df_centros[df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar].iloc[0]
-                    st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
-                    st.success(f"¡{centro_para_adjuntar} adjuntado!")
-                    st.info("Los datos se pre-llenarán en la pestaña 'Llenar Formulario' (vista de Operador).")
-                except Exception:
-                    st.error("No se pudo adjuntar el centro seleccionado. Revisa el nombre o el CSV de centros.")
+                datos_centro_seleccionado = df_centros[
+                    df_centros['CENTRO_EDUCATIVO'] == centro_para_adjuntar
+                ].iloc[0]
+                
+                st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
+                
+                st.success(f"¡{centro_para_adjuntar} adjuntado!")
+                st.info("Los datos se pre-llenarán en la pestaña 'Llenar Formulario' (vista de Operador).")
             else:
                 st.warning("Por favor, seleccione un centro de la lista.")
 
@@ -233,35 +362,81 @@ def show_ui(df_centros):
         users_df = pd.DataFrame()
         try:
             users_df = database.get_all_users()
+            # Mostrar si el usuario está bloqueado
+            if not users_df.empty:
+                # Obtener estado de bloqueo
+                import database as db
+                users_df['Bloqueado'] = users_df['id'].apply(lambda uid: db.get_user(users_df.loc[users_df['id'] == uid, 'username'].values[0]).get('is_locked', False))
             st.dataframe(users_df, use_container_width=True)
         except Exception as e:
             st.error(f"Error al cargar usuarios: {e}")
+
+        # Desbloquear usuarios bloqueados
+        st.subheader("Desbloquear Usuario Bloqueado")
+        try:
+            if not users_df.empty:
+                locked_users = users_df[users_df['Bloqueado'] == True]
+                if not locked_users.empty:
+                    unlock_options = {u['id']: f"{u['full_name']} ({u['username']})" for u in locked_users.to_dict('records')}
+                    selected_unlock_id = st.selectbox("Seleccione usuario bloqueado:", options=list(unlock_options.keys()), format_func=lambda x: unlock_options[x], key="unlock_user")
+                    if st.button("Desbloquear Usuario", key="btn_unlock_user"):
+                        success, msg = database.unlock_user(selected_unlock_id)
+                        if success:
+                            import database as db
+                            db.registrar_auditoria(
+                                st.session_state["user_id"],
+                                "desbloqueo_usuario",
+                                f"Desbloqueo de usuario ID {selected_unlock_id}"
+                            )
+                            st.success("Usuario desbloqueado. Ahora debe cambiar la contraseña para reactivar el acceso.")
+                            st.toast("Usuario desbloqueado", icon="🔓")
+                        else:
+                            st.error(msg)
+                else:
+                    st.info("No hay usuarios bloqueados.")
+        except Exception as e:
+            st.error(f"Error al intentar desbloquear usuario: {e}")
         
         st.subheader("Cambiar Contraseña de Usuario")
         try:
             if not users_df.empty:
                 users_list = users_df.to_dict('records')
-                user_options = {u['id']: f"{u['full_name']} ({u['username']})" for u in users_list}
-                selected_user_id = st.selectbox("Seleccione el usuario:", options=list(user_options.keys()), format_func=lambda x: user_options[x])
-                colp1, colp2 = st.columns(2)
-                with colp1:
-                    new_password = st.text_input("Nueva contraseña", type="password")
-                with colp2:
-                    new_password_confirm = st.text_input("Confirmar contraseña", type="password")
+                # Búsqueda rápida por nombre o usuario
+                search_user = st.text_input("Buscar usuario por nombre o username")
+                filtered_users = [u for u in users_list if search_user.lower() in u['full_name'].lower() or search_user.lower() in u['username'].lower()] if search_user else users_list
+                if filtered_users:
+                    user_options = {u['id']: f"{u['full_name']} ({u['username']})" for u in filtered_users}
+                    selected_user_id = st.selectbox("Seleccione el usuario:", options=list(user_options.keys()), format_func=lambda x: user_options[x], key="select_user_pw")
+                    colp1, colp2 = st.columns(2)
+                    with colp1:
+                        new_password = st.text_input("Nueva contraseña", type="password", key="new_pw")
+                    with colp2:
+                        new_password_confirm = st.text_input("Confirmar contraseña", type="password", key="confirm_pw")
 
-                if st.button("Cambiar Contraseña"):
-                    if not new_password or not new_password_confirm:
-                        st.error("Ambos campos de contraseña son requeridos.")
-                    elif new_password != new_password_confirm:
-                        st.error("Las contraseñas no coinciden.")
-                    elif len(new_password) < 8:
-                        st.error("La contraseña debe tener al menos 8 caracteres.")
-                    else:
-                        success, message = database.change_user_password(selected_user_id, new_password)
-                        if success:
-                            st.success(message)
+                    if st.button("Cambiar Contraseña", key="btn_change_pw"):
+                        if not new_password or not new_password_confirm:
+                            st.warning("Ambos campos de contraseña son requeridos.")
+                        elif new_password != new_password_confirm:
+                            st.warning("Las contraseñas no coinciden.")
+                        elif len(new_password) < 8:
+                            st.warning("La contraseña debe tener al menos 8 caracteres.")
                         else:
-                            st.error(message)
+                            with st.spinner("Actualizando contraseña..."):
+                                success, message = database.change_user_password(selected_user_id, new_password)
+                            if success:
+                                import database as db
+                                db.registrar_auditoria(
+                                    st.session_state["user_id"],
+                                    "cambio_contraseña_usuario",
+                                    f"Cambio de contraseña para usuario ID {selected_user_id}"
+                                )
+                                st.success("Contraseña cambiada exitosamente.")
+                                st.toast("Contraseña cambiada", icon="🔑")
+                                st.balloons()
+                            else:
+                                st.error(message)
+                else:
+                    st.info("No se encontraron usuarios con ese criterio de búsqueda.")
             else:
                 st.info("No hay usuarios para modificar.")
         except Exception as e:
