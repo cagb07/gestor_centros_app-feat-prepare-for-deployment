@@ -13,8 +13,11 @@ try:
         raise ImportError("streamlit_javascript.st_javascript no es callable")
 except Exception:
     # Si la dependencia no está instalada, definimos un stub que lanza una excepción controlada
+    ST_JAVASCRIPT_AVAILABLE = False
     def st_javascript(code: Any, key: Any = None, timeout: int = 5000) -> NoReturn:
         raise RuntimeError("streamlit-javascript no está instalado. Instala la dependencia para habilitar GPS via JS.")
+else:
+    ST_JAVASCRIPT_AVAILABLE = True
 try:
     import folium
 except Exception:
