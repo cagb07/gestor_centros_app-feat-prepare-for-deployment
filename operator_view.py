@@ -35,6 +35,64 @@ except Exception:
     def st_canvas(*args, **kwargs):
         raise RuntimeError("La dependencia 'streamlit_drawable_canvas' no está instalada. Instálala para usar firmas/canvas.")
 
+# Helper: modal HTML + postMessage listener (usa streamlit_javascript)
+def show_geo_modal(label: str, field_key: str, timeout_ms: int = 15000):
+        """Renderiza un modal HTML que solicita la ubicación y publica el resultado
+        mediante postMessage. Retorna el JSON string recibido o None.
+        """
+        modal_id = f"geo_modal_{field_key}"
+        import html as _html
+        modal_html = f"""
+        <div id="{modal_id}" style="font-family:Arial,Helvetica,sans-serif;padding:10px;border-radius:8px;background:#fff;">
+            <h3>Obtener ubicación — {_html.escape(label)}</h3>
+            <p>Presiona el botón para solicitar permisos de ubicación al navegador.</p>
+            <button id="btn_get_geo" style="padding:10px 14px;border-radius:6px;background:#0b5fff;color:#fff;border:none;cursor:pointer">📍 Capturar ubicación</button>
+            <button id="btn_close" style="padding:8px 12px;margin-left:8px;border-radius:6px;background:#ccc;color:#000;border:none;cursor:pointer">Cerrar</button>
+            <div id="geo_result" style="margin-top:12px;color:#222"></div>
+            <script>
+                const btn = document.getElementById('btn_get_geo');
+                const btnClose = document.getElementById('btn_close');
+                const res = document.getElementById('geo_result');
+                btn.addEventListener('click', ()=>{
+                    res.innerText = 'Solicitando ubicación...';
+                    navigator.geolocation.getCurrentPosition(
+                        p => {
+                            const payload = {source: 'streamlit-geo-modal', lat: p.coords.latitude, lng: p.coords.longitude};
+                            window.parent.postMessage(payload, '*');
+                            res.innerText = `Lat: ${p.coords.latitude.toFixed(6)}, Lng: ${p.coords.longitude.toFixed(6)}`;
+                        },
+                        e => {
+                            const payload = {source: 'streamlit-geo-modal', error: e.message};
+                            window.parent.postMessage(payload, '*');
+                            res.innerText = 'Error: ' + e.message;
+                        }, {enableHighAccuracy:true, timeout: 10000}
+                    );
+                });
+                btnClose.addEventListener('click', ()=>{ res.innerText='Modal cerrado'; window.parent.postMessage({source:'streamlit-geo-modal', closed:true}, '*'); });
+            </script>
+        </div>
+        """
+        try:
+                components.html(modal_html, height=240, scrolling=False)
+        except Exception:
+                pass
+
+        if not ST_JAVASCRIPT_AVAILABLE:
+                return None
+
+        js_listener = (
+                "new Promise((resolve, reject) => {"
+                "function handler(e){ try{ if(e.data && e.data.source === 'streamlit-geo-modal'){ window.removeEventListener('message', handler); resolve(JSON.stringify(e.data)); }}catch(err){} }"
+                "window.addEventListener('message', handler);"
+                f"setTimeout(()=>{{ window.removeEventListener('message', handler); reject('timeout'); }},{timeout_ms});"
+                "})"
+        )
+        try:
+                res = st_javascript(js_listener, key=f"js_geo_modal_listener_{field_key}")
+                return res
+        except Exception:
+                return None
+
 # --- LÓGICA DE PRE-LLENADO ---
 # Mapeo de columnas CSV a etiquetas de formulario ESPERADAS
 CSV_TO_FORM_MAP = {
