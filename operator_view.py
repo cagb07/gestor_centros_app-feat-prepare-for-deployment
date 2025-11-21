@@ -42,9 +42,11 @@ def show_geo_modal(label: str, field_key: str, timeout_ms: int = 15000):
         """
         modal_id = f"geo_modal_{field_key}"
         import html as _html
-        modal_html = f"""
-        <div id="{modal_id}" style="font-family:Arial,Helvetica,sans-serif;padding:10px;border-radius:8px;background:#fff;">
-            <h3>Obtener ubicación — {_html.escape(label)}</h3>
+        label_esc = _html.escape(label)
+        # Usar plantilla sin f-string para evitar que las llaves de JS sean interpretadas
+        modal_html = """
+        <div id="__MODAL_ID__" style="font-family:Arial,Helvetica,sans-serif;padding:10px;border-radius:8px;background:#fff;">
+            <h3>Obtener ubicación — __LABEL__</h3>
             <p>Presiona el botón para solicitar permisos de ubicación al navegador.</p>
             <button id="btn_get_geo" style="padding:10px 14px;border-radius:6px;background:#0b5fff;color:#fff;border:none;cursor:pointer">📍 Capturar ubicación</button>
             <button id="btn_close" style="padding:8px 12px;margin-left:8px;border-radius:6px;background:#ccc;color:#000;border:none;cursor:pointer">Cerrar</button>
@@ -72,6 +74,7 @@ def show_geo_modal(label: str, field_key: str, timeout_ms: int = 15000):
             </script>
         </div>
         """
+        modal_html = modal_html.replace('__MODAL_ID__', modal_id).replace('__LABEL__', label_esc)
         try:
                 components.html(modal_html, height=240, scrolling=False)
         except Exception:
