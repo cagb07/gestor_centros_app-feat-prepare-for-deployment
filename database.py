@@ -1,4 +1,25 @@
-﻿try:
+﻿# --- FUNCIONES DE AUDITORÍA ---
+def obtener_auditoria():
+    conn = get_db_connection()
+    if not conn:
+        return pd.DataFrame(columns=["id", "user_id", "accion", "detalle", "fecha"])
+    try:
+        df = pd.read_sql("SELECT id, user_id, accion, detalle, fecha FROM auditoria ORDER BY fecha DESC", conn)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["id", "user_id", "accion", "detalle", "fecha"])
+
+def registrar_auditoria(user_id, accion, detalle):
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO auditoria (user_id, accion, detalle, fecha) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)", (user_id, accion, detalle))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+try:
     import streamlit as st
 except Exception:
     # Si Streamlit no está instalado (por ejemplo al ejecutar init_db.py),
