@@ -157,63 +157,81 @@ def _render_form_from_structure(structure):
             
         elif field_type == "Geolocalización":
             st.subheader(display_label)
-            map_center = [9.9333, -84.0833] # Centrar en Costa Rica
+            # Claves para session_state
+            gps_session_key = f"{field_key}_gps"
+            map_click_key = f"{field_key}_map_click"
+
+            # Priorizar centro del mapa en este orden: GPS guardado, clic previo en mapa, centro por defecto
+            default_center = [9.9333, -84.0833]  # Costa Rica
+            stored_gps = st.session_state.get(gps_session_key)
+            stored_map_click = st.session_state.get(map_click_key)
+
             try:
-                m = folium.Map(location=map_center, zoom_start=7)
+                # Elegir centro y crear mapa
+                if stored_gps and isinstance(stored_gps, dict) and 'lat' in stored_gps and 'lng' in stored_gps:
+                    center = [float(stored_gps['lat']), float(stored_gps['lng'])]
+                elif stored_map_click and isinstance(stored_map_click, dict) and 'lat' in stored_map_click and 'lng' in stored_map_click:
+                    center = [float(stored_map_click['lat']), float(stored_map_click['lng'])]
+                else:
+                    center = default_center
+
+                m = folium.Map(location=center, zoom_start=12 if center != default_center else 7)
+
+                # Si hay coordenadas guardadas por GPS, añadir marcador visible
+                if stored_gps and isinstance(stored_gps, dict):
+                    try:
+                        folium.Marker(location=[float(stored_gps['lat']), float(stored_gps['lng'])],
+                                      popup='Ubicación guardada (GPS)',
+                                      icon=folium.Icon(color='red', icon='map-marker')).add_to(m)
+                    except Exception:
+                        pass
+
+                # Si hay coordenadas por clic previo en el mapa, añadir marcador
+                if stored_map_click and isinstance(stored_map_click, dict):
+                    try:
+                        folium.CircleMarker(location=[float(stored_map_click['lat']), float(stored_map_click['lng'])],
+                                            radius=6, color='blue', fill=True, fill_opacity=0.7,
+                                            popup='Ubicación seleccionada en mapa').add_to(m)
+                    except Exception:
+                        pass
+
                 # Añadimos LatLngPopup para que al hacer clic se obtenga lat/lng
                 folium.LatLngPopup().add_to(m)
                 map_data = st_folium(m, key=field_key, width=700, height=400)
 
+                # Procesar retorno de st_folium: persistir clics en session_state
                 coords = None
-                # st_folium puede devolver 'last_clicked' con {'lat','lng'}
                 if map_data:
-                    # Manejar varias formas que puede devolver st_folium
                     if isinstance(map_data, dict):
                         if map_data.get('last_clicked'):
                             coords = map_data['last_clicked']
                         elif map_data.get('last_object_clicked'):
                             coords = map_data['last_object_clicked']
-                        elif map_data.get('last_mouseover'):
-                            # fallback improbable, pero seguro
-                            coords = map_data['last_mouseover']
                     elif isinstance(map_data, (list, tuple)) and len(map_data) >= 2:
                         try:
                             coords = {'lat': float(map_data[0]), 'lng': float(map_data[1])}
                         except Exception:
                             coords = None
 
-                    # Normalizar coordenadas: algunos retornos pueden ser [lat, lng] o {'lat','lng'}
-                    if coords and isinstance(coords, (list, tuple)) and len(coords) >= 2:
-                        try:
-                            coords = {'lat': float(coords[0]), 'lng': float(coords[1])}
-                        except Exception:
-                            coords = None
-                    elif coords and isinstance(coords, dict):
-                        # asegurar claves 'lat' y 'lng' existentes
-                        if 'lat' in coords and 'lng' in coords:
-                            try:
-                                coords = {'lat': float(coords['lat']), 'lng': float(coords['lng'])}
-                            except Exception:
-                                coords = None
+                # Normalizar y guardar clic del mapa en session_state para mostrar marcador en reruns
+                if coords and isinstance(coords, dict) and 'lat' in coords and 'lng' in coords:
+                    try:
+                        coords = {'lat': float(coords['lat']), 'lng': float(coords['lng'])}
+                        st.session_state[map_click_key] = coords
+                    except Exception:
+                        pass
 
-                if coords:
-                    st.write(f"Coordenadas del mapa: {coords['lat']:.6f}, {coords['lng']:.6f}")
-                else:
-                    st.info("Haga clic en el mapa para seleccionar coordenadas.")
-
-                # Verificar si hay coordenadas capturadas por GPS (botón fuera del form)
-                gps_session_key = f"{field_key}_gps"
-                stored_gps = st.session_state.get(gps_session_key, None)
-                
-                # Priorizar GPS si está disponible, sino usar clic del mapa
+                # Elegir valor final para el formulario: GPS > mapa clic > None
                 if stored_gps:
                     form_data[label] = stored_gps
                     st.write(f"✅ **Ubicación GPS capturada:** {stored_gps['lat']:.6f}, {stored_gps['lng']:.6f}")
-                elif coords:
-                    form_data[label] = coords
+                elif st.session_state.get(map_click_key):
+                    mc = st.session_state.get(map_click_key)
+                    form_data[label] = mc
+                    st.write(f"📍 **Ubicación seleccionada en mapa:** {mc['lat']:.6f}, {mc['lng']:.6f}")
                 else:
                     form_data[label] = None
-                    
+
             except Exception as e:
                 st.error(f"Error cargando componente de mapa: {e}")
                 form_data[label] = None
