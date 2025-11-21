@@ -106,16 +106,34 @@ def _render_form_from_structure(structure):
                 coords = None
                 # st_folium puede devolver 'last_clicked' con {'lat','lng'}
                 if map_data:
-                    if map_data.get('last_clicked'):
-                        coords = map_data['last_clicked']
-                    elif map_data.get('last_object_clicked'):
-                        coords = map_data['last_object_clicked']
-                    # some versions may return a tuple
-                    elif isinstance(map_data, tuple) and len(map_data) >= 2:
+                    # Manejar varias formas que puede devolver st_folium
+                    if isinstance(map_data, dict):
+                        if map_data.get('last_clicked'):
+                            coords = map_data['last_clicked']
+                        elif map_data.get('last_object_clicked'):
+                            coords = map_data['last_object_clicked']
+                        elif map_data.get('last_mouseover'):
+                            # fallback improbable, pero seguro
+                            coords = map_data['last_mouseover']
+                    elif isinstance(map_data, (list, tuple)) and len(map_data) >= 2:
                         try:
                             coords = {'lat': float(map_data[0]), 'lng': float(map_data[1])}
                         except Exception:
                             coords = None
+
+                    # Normalizar coordenadas: algunos retornos pueden ser [lat, lng] o {'lat','lng'}
+                    if coords and isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                        try:
+                            coords = {'lat': float(coords[0]), 'lng': float(coords[1])}
+                        except Exception:
+                            coords = None
+                    elif coords and isinstance(coords, dict):
+                        # asegurar claves 'lat' y 'lng' existentes
+                        if 'lat' in coords and 'lng' in coords:
+                            try:
+                                coords = {'lat': float(coords['lat']), 'lng': float(coords['lng'])}
+                            except Exception:
+                                coords = None
 
                 if coords:
                     st.write(f"Coordenadas del mapa: {coords['lat']:.6f}, {coords['lng']:.6f}")
@@ -373,6 +391,9 @@ def show_ui(df_centros):
                         with col1:
                             st.write(f"**{label}**")
                         with col2:
+                            if not ST_JAVASCRIPT_AVAILABLE:
+                                st.info("El método 'Usar mi ubicación' no está disponible en este despliegue. Usa el mapa o introduce coordenadas manualmente abajo.")
+
                             if st.button(f"📍 Capturar", key=f"btn_gps_out_{field_key}", use_container_width=True):
                                 js_code = (
                                     "new Promise((resolve, reject) => {"
@@ -396,6 +417,21 @@ def show_ui(df_centros):
                                         st.error(f"Error parseando coordenadas: {e}")
                                 else:
                                     st.warning("⚠️ No se obtuvo ubicación. Verifica permisos del navegador.")
+
+                            # Campo alternativo manual para ingresar coordenadas (útil si JS o permisos fallan)
+                            manual_lat = st.text_input(f"Latitud manual — {label}", value="", key=f"manual_lat_{field_key}")
+                            manual_lng = st.text_input(f"Longitud manual — {label}", value="", key=f"manual_lng_{field_key}")
+                            if st.button(f"Guardar coordenadas manuales — {label}", key=f"btn_save_manual_{field_key}"):
+                                try:
+                                    if manual_lat and manual_lng:
+                                        lat = float(manual_lat.strip())
+                                        lng = float(manual_lng.strip())
+                                        st.session_state[gps_session_key] = {'lat': lat, 'lng': lng}
+                                        st.success(f"Coordenadas guardadas manualmente: {lat:.6f}, {lng:.6f}")
+                                    else:
+                                        st.warning("Ingresa latitud y longitud válidas antes de guardar.")
+                                except Exception:
+                                    st.error("Formato inválido. Usa números decimales para latitud y longitud, por ejemplo: 9.9333")
                         with col3:
                             if st.session_state.get(gps_session_key):
                                 if st.button("🗑️ Limpiar", key=f"btn_clear_gps_{field_key}", use_container_width=True):
