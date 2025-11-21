@@ -10,9 +10,22 @@ except Exception:
     # Si la dependencia no está instalada, definimos un stub que lanza una excepción controlada
     def st_javascript(code, key=None, timeout=5000):
         raise RuntimeError("streamlit-javascript no está instalado. Instala la dependencia para habilitar GPS via JS.")
-import folium
-from streamlit_folium import st_folium
-from streamlit_drawable_canvas import st_canvas
+try:
+    import folium
+except Exception:
+    folium = None
+
+try:
+    from streamlit_folium import st_folium
+except Exception:
+    def st_folium(*args, **kwargs):
+        raise RuntimeError("La dependencia 'streamlit_folium' no está instalada. Instálala para usar mapas.")
+
+try:
+    from streamlit_drawable_canvas import st_canvas
+except Exception:
+    def st_canvas(*args, **kwargs):
+        raise RuntimeError("La dependencia 'streamlit_drawable_canvas' no está instalada. Instálala para usar firmas/canvas.")
 
 # --- LÓGICA DE PRE-LLENADO ---
 # Mapeo de columnas CSV a etiquetas de formulario ESPERADAS

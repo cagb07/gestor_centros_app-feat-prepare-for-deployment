@@ -2,8 +2,6 @@
 import pandas as pd
 import database
 import auth
-import admin_view
-import operator_view
 
 # Configuración de la página (¡llamarla primero!)
 st.set_page_config(page_title="Gestor de Centros", layout="wide", initial_sidebar_state="collapsed")
@@ -34,6 +32,19 @@ def login_screen():
 
 # --- APLICACIÓN PRINCIPAL (POST-LOGIN) ---
 def main_app():
+    # Intentar importar las vistas de forma perezosa (evita fallos en import)
+    try:
+        import admin_view
+    except Exception as e:
+        admin_view = None
+        st.error(f"Error importando la vista de administrador: {e}")
+
+    try:
+        import operator_view
+    except Exception as e:
+        operator_view = None
+        st.error(f"Error importando la vista de operador: {e}")
+
     # Configurar la barra lateral
     st.sidebar.title(f"Hola, {st.session_state['full_name']}")
     st.sidebar.caption(f"Rol: {st.session_state['role'].capitalize()}")
@@ -76,10 +87,16 @@ def main_app():
     # --- ENRUTADOR POR ROL ---
     # Muestra la interfaz correspondiente al rol del usuario
     if st.session_state["role"] == "admin":
-        admin_view.show_ui(df_centros)
+        if admin_view:
+            admin_view.show_ui(df_centros)
+        else:
+            st.error("La vista de administrador no está disponible debido a un error de importación. Revisa las dependencias.")
         
     elif st.session_state["role"] == "operador":
-        operator_view.show_ui(df_centros)
+        if operator_view:
+            operator_view.show_ui(df_centros)
+        else:
+            st.error("La vista de operador no está disponible debido a un error de importación. Revisa las dependencias.")
 
 # --- PUNTO DE ENTRADA PRINCIPAL ---
 if "logged_in" not in st.session_state:
