@@ -204,7 +204,8 @@ def increment_failed_attempts(username):
     with conn.cursor() as cur:
         cur.execute("UPDATE usuarios SET failed_attempts = failed_attempts + 1 WHERE username = %s", (username,))
         cur.execute("SELECT failed_attempts FROM usuarios WHERE username = %s", (username,))
-        attempts = cur.fetchone()[0]
+        row = cur.fetchone()
+        attempts = row[0] if row and row[0] is not None else 0
         if attempts >= 5:
             cur.execute("UPDATE usuarios SET is_locked = TRUE WHERE username = %s", (username,))
     conn.commit()
@@ -378,7 +379,8 @@ def get_total_submission_count():
         return 0
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM form_submissions")
-        count = cur.fetchone()[0]
+        row = cur.fetchone()
+        count = int(row[0]) if row and row[0] is not None else 0
     return count
 
 def get_submission_count_by_area():
