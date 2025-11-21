@@ -461,18 +461,55 @@ def show_ui(df_centros):
                                     modal_res = show_geo_modal(label, field_key)
                                     gps_res = None
                                     if modal_res:
+                                        gps_payload = None
+                                        # Depuración opcional
+                                        if st.session_state.get('debug_geo'):
+                                            st.write("Modal raw response:", modal_res)
                                         try:
-                                            gps_payload = json.loads(modal_res)
-                                            if gps_payload.get('error'):
+                                            # modal_res puede ser JSON string, dict, o mensajes como 'timeout'
+                                            if isinstance(modal_res, str):
+                                                s = modal_res.strip()
+                                                if not s:
+                                                    st.warning("Respuesta vacía del modal.")
+                                                elif s.lower() in ('timeout', 'null', 'none'):
+                                                    st.warning(f"Modal terminó con estado: {s}")
+                                                    gps_payload = {'error': s}
+                                                else:
+                                                    try:
+                                                        gps_payload = json.loads(s)
+                                                    except Exception:
+                                                        # Intentar ast.literal_eval como fallback para dicts sin comillas
+                                                        try:
+                                                            import ast
+                                                            gps_payload = ast.literal_eval(s)
+                                                        except Exception:
+                                                            # No se pudo parsear
+                                                            st.warning(f"Respuesta del modal no es JSON: {s}")
+                                                            gps_payload = None
+                                            elif isinstance(modal_res, dict):
+                                                gps_payload = modal_res
+                                            else:
+                                                gps_payload = modal_res
+                                        except Exception as e:
+                                            st.error(f"Error procesando respuesta del modal: {e}")
+
+                                        if gps_payload:
+                                            # Manejar errores enviados desde el modal
+                                            if isinstance(gps_payload, dict) and gps_payload.get('error'):
                                                 st.error(f"Error GPS: {gps_payload.get('error')}")
-                                            elif gps_payload.get('closed'):
+                                            elif isinstance(gps_payload, dict) and gps_payload.get('closed'):
                                                 st.info("Modal cerrado por el usuario.")
                                             else:
-                                                gps_coords = {'lat': float(gps_payload.get('lat')), 'lng': float(gps_payload.get('lng'))}
-                                                st.session_state[gps_session_key] = gps_coords
-                                                st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
-                                        except Exception as e:
-                                            st.error(f"Error parseando respuesta del modal: {e}")
+                                                try:
+                                                    lat = float(gps_payload.get('lat'))
+                                                    lng = float(gps_payload.get('lng'))
+                                                    gps_coords = {'lat': lat, 'lng': lng}
+                                                    st.session_state[gps_session_key] = gps_coords
+                                                    st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
+                                                except Exception as e:
+                                                    st.error(f"La respuesta del modal no contiene lat/lng válidos: {e}")
+                                        else:
+                                            st.warning("⚠️ No se obtuvo ubicación desde el modal. Verifica permisos del navegador o usa la entrada manual.")
                                     else:
                                         st.warning("⚠️ No se obtuvo ubicación desde el modal. Verifica permisos del navegador o usa la entrada manual.")
                                 else:
