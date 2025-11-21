@@ -309,10 +309,33 @@ def _build_print_html(form_data, title="Formulario"):
                 except Exception:
                     display = str(val)
         elif isinstance(val, dict):
-            try:
-                display = "<pre>" + json.dumps(val, ensure_ascii=False, indent=2) + "</pre>"
-            except Exception:
-                display = str(val)
+                        # Si el dict contiene coordenadas lat/lng, insertamos un mapa interactivo (Leaflet)
+                        try:
+                                if 'lat' in val and 'lng' in val:
+                                        # Crear un div único para el mapa
+                                        map_div_id = f"map_print_{key.replace(' ', '_')}_{int(abs(hash(key)) % 100000)}"
+                                        lat = float(val['lat'])
+                                        lng = float(val['lng'])
+                                        zoom_level = 15  # zoom cercano para visualización (aprox. "80%" más cercano)
+                                        map_html = f'''
+<div id="{map_div_id}" style="width:100%;height:400px;border:1px solid #ddd;margin-bottom:8px"></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    (function(){{
+        try{{
+            var map = L.map('{map_div_id}').setView([{lat}, {lng}], {zoom_level});
+            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{maxZoom: 19}}).addTo(map);
+            L.marker([{lat}, {lng}]).addTo(map).bindPopup('Ubicación: {lat:.6f}, {lng:.6f}');
+        }}catch(e){{ console.error(e); }}
+    }})();
+</script>
+'''
+                                        display = map_html
+                                else:
+                                        display = "<pre>" + json.dumps(val, ensure_ascii=False, indent=2) + "</pre>"
+                        except Exception:
+                                display = str(val)
         else:
             display = str(val)
 
@@ -541,8 +564,14 @@ def show_ui(df_centros):
                                     if manual_lat and manual_lng:
                                         lat = float(manual_lat.strip())
                                         lng = float(manual_lng.strip())
+                                        # Guardar tanto en la clave GPS como en el clic de mapa para visualizar marcador inmediatamente
                                         st.session_state[gps_session_key] = {'lat': lat, 'lng': lng}
+                                        # También guardar como mapa click para mostrar marcador
+                                        map_click_key = f"{field_key}_map_click"
+                                        st.session_state[map_click_key] = {'lat': lat, 'lng': lng}
                                         st.success(f"Coordenadas guardadas manualmente: {lat:.6f}, {lng:.6f}")
+                                        # Forzar rerun para que el mapa actualice y muestre el marcador
+                                        st.rerun()
                                     else:
                                         st.warning("Ingresa latitud y longitud válidas antes de guardar.")
                                 except Exception:
@@ -550,7 +579,19 @@ def show_ui(df_centros):
                         with col3:
                             if st.session_state.get(gps_session_key):
                                 if st.button("🗑️ Limpiar", key=f"btn_clear_gps_{field_key}", use_container_width=True):
-                                    del st.session_state[gps_session_key]
+                                    # Eliminar tanto la ubicación GPS como cualquier clic persistido en el mapa
+                                    try:
+                                        if gps_session_key in st.session_state:
+                                            del st.session_state[gps_session_key]
+                                    except Exception:
+                                        pass
+                                    try:
+                                        map_click_key = f"{field_key}_map_click"
+                                        if map_click_key in st.session_state:
+                                            del st.session_state[map_click_key]
+                                    except Exception:
+                                        pass
+                                    st.success("Coordenadas eliminadas.")
 
                         # Mostrar coordenadas actuales si existen
                         if st.session_state.get(gps_session_key):
