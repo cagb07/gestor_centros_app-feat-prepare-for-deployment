@@ -1,48 +1,11 @@
 ﻿import streamlit as st
 import pandas as pd
 import database
-import auth
+            </style>
+        """, unsafe_allow_html=True)
 
-# Configuración de la página (¡llamarla primero!)
-st.set_page_config(page_title="Gestor de Centros", layout="wide", initial_sidebar_state="collapsed")
-
-# --- FUNCIÓN DE LOGIN ---
-def login_screen():
-    """
-    Muestra la pantalla de inicio de sesión y gestiona el login.
-    """
-    st.title("Gestor de Centros Educativos 🇨🇷")
-    st.header("Inicio de Sesión")
-
-    with st.form("login_form"):
-        username = st.text_input("Usuario")
-        password = st.text_input("Contraseña", type="password")
-        submitted = st.form_submit_button("Ingresar")
-
-    if submitted:
-        user_data = database.get_user(username)
-        if user_data:
-            if user_data.get("is_locked"):
-                st.error("Este usuario ha sido bloqueado por demasiados intentos fallidos. Solicite al administrador el cambio y desbloqueo de contraseña.")
-                return
-            if auth.check_password(password, user_data["password_hash"]):
-                # Login exitoso
-                st.session_state["logged_in"] = True
-                st.session_state["user_id"] = user_data["id"]
-                st.session_state["username"] = user_data["username"]
-                st.session_state["role"] = user_data["role"]
-                st.session_state["full_name"] = user_data["full_name"]
-                database.reset_failed_attempts(username)
-                st.rerun()
-            else:
-                database.increment_failed_attempts(username)
-                user_data = database.get_user(username)  # refrescar datos
-                if user_data.get("is_locked"):
-                    st.error("Usuario bloqueado tras 5 intentos fallidos. Solicite al administrador el cambio y desbloqueo de contraseña.")
-                else:
-                    st.error("Usuario o contraseña incorrectos")
-        else:
-            st.toast("Usuario o contraseña incorrectos", icon="❌")
+    # Navegación rápida entre vistas principales
+    st.sidebar.markdown("---")
 
 # --- APLICACIÓN PRINCIPAL (POST-LOGIN) ---
 def main_app():
