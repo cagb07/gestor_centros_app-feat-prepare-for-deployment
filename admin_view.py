@@ -4,74 +4,93 @@ import database
 import json
 
 def show_ui(df_centros):
-                            # Mostrar historial de auditoría
-                            st.subheader("🕵️ Historial de acciones (auditoría)")
-                            try:
-                                import database as db
-                                auditoria_df = db.obtener_auditoria()
-                                if not auditoria_df.empty:
-                                    st.dataframe(auditoria_df, use_container_width=True)
-                                else:
-                                    st.info("No hay acciones registradas en la auditoría.")
-                            except Exception as e:
-                                st.error(f"Error al cargar auditoría: {e}")
-                    # Gestión avanzada de roles y permisos
-                    st.subheader("🔑 Cambiar rol de usuario")
-                    try:
-                        if not users_df.empty:
-                            user_options_roles = {u['id']: f"{u['full_name']} ({u['username']}) - {u['role']}" for u in users_df.to_dict('records')}
-                            selected_user_id_role = st.selectbox("Seleccione usuario para cambiar rol:", options=list(user_options_roles.keys()), format_func=lambda x: user_options_roles[x], key="select_user_role")
-                            new_role = st.selectbox("Nuevo rol:", ["operador", "admin"], key="new_role_select")
-                            if st.button("Actualizar rol", key="btn_update_role"):
-                                import database as db
-                                try:
-                                    conn = db.get_db_connection()
-                                    with conn.cursor() as cur:
-                                        cur.execute("UPDATE usuarios SET role = %s WHERE id = %s", (new_role, selected_user_id_role))
-                                    conn.commit()
-                                    db.registrar_auditoria(
-                                        st.session_state["user_id"],
-                                        "cambio_rol_usuario",
-                                        f"Cambio de rol para usuario ID {selected_user_id_role} a {new_role}"
-                                    )
-                                    st.success("Rol actualizado correctamente.")
-                                    st.toast("Rol de usuario actualizado", icon="🔑")
-                                except Exception as e:
-                                    st.error(f"Error al actualizar rol: {e}")
-                        else:
-                            st.info("No hay usuarios para modificar roles.")
-                    except Exception as e:
-                        st.error(f"Error en la gestión de roles: {e}")
-            # Exportar datos filtrados
-            st.subheader("📤 Exportar datos filtrados")
-            col_exp1, col_exp2 = st.columns(2)
-            with col_exp1:
-                csv = df_filtrado.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Descargar CSV",
-                    data=csv,
-                    file_name="centros_filtrados.csv",
-                    mime="text/csv",
-                    key="btn_export_csv"
-                )
-            with col_exp2:
+    # Mostrar historial de auditoría
+    st.subheader("🕵️ Historial de acciones (auditoría)")
+    try:
+        import database as db
+        auditoria_df = db.obtener_auditoria()
+        if not auditoria_df.empty:
+            st.dataframe(auditoria_df, use_container_width=True)
+        else:
+            st.info("No hay acciones registradas en la auditoría.")
+    except Exception as e:
+        st.error(f"Error al cargar auditoría: {e}")
+
+    # Gestión avanzada de roles y permisos
+    st.subheader("🔑 Cambiar rol de usuario")
+    try:
+        users_df = pd.DataFrame()
+        try:
+            users_df = database.get_all_users()
+        except Exception:
+            pass
+        if not users_df.empty:
+            user_options_roles = {u['id']: f"{u['full_name']} ({u['username']}) - {u['role']}" for u in users_df.to_dict('records')}
+            selected_user_id_role = st.selectbox("Seleccione usuario para cambiar rol:", options=list(user_options_roles.keys()), format_func=lambda x: user_options_roles[x], key="select_user_role")
+            new_role = st.selectbox("Nuevo rol:", ["operador", "admin"], key="new_role_select")
+            if st.button("Actualizar rol", key="btn_update_role"):
+                import database as db
                 try:
-                    import io
-                    import pandas as pd
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        df_filtrado.to_excel(writer, index=False, sheet_name='Centros')
-                    st.download_button(
-                        label="Descargar Excel",
-                        data=output.getvalue(),
-                        file_name="centros_filtrados.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="btn_export_excel"
+                    conn = db.get_db_connection()
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE usuarios SET role = %s WHERE id = %s", (new_role, selected_user_id_role))
+                    conn.commit()
+                    db.registrar_auditoria(
+                        st.session_state["user_id"],
+                        "cambio_rol_usuario",
+                        f"Cambio de rol para usuario ID {selected_user_id_role} a {new_role}"
                     )
+                    st.success("Rol actualizado correctamente.")
+                    st.toast("Rol de usuario actualizado", icon="🔑")
                 except Exception as e:
-                    st.error(f"Error al exportar a Excel: {e}")
+                    st.error(f"Error al actualizar rol: {e}")
+        else:
+            st.info("No hay usuarios para modificar roles.")
+    except Exception as e:
+        st.error(f"Error en la gestión de roles: {e}")
+
+    # Exportar datos filtrados
+    st.subheader("📤 Exportar datos filtrados")
+    # Asegurarse de que df_filtrado esté definido
+    filtro_nombre = st.session_state.get('filtro_nombre', '')
+    filtro_provincia = st.session_state.get('filtro_provincia', '')
+    filtro_codigo = st.session_state.get('filtro_codigo', '')
+    df_filtrado = df_centros.copy()
+    if filtro_nombre:
+        df_filtrado = df_filtrado[df_filtrado['CENTRO_EDUCATIVO'].str.contains(filtro_nombre, case=False, na=False)]
+    if filtro_provincia and 'PROVINCIA' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['PROVINCIA'].str.contains(filtro_provincia, case=False, na=False)]
+    if filtro_codigo and 'CODIGO' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['CODIGO'].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        csv = df_filtrado.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Descargar CSV",
+            data=csv,
+            file_name="centros_filtrados.csv",
+            mime="text/csv",
+            key="btn_export_csv"
+        )
+    with col_exp2:
+        try:
+            import io
+            import pandas as pd
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_filtrado.to_excel(writer, index=False, sheet_name='Centros')
+            st.download_button(
+                label="Descargar Excel",
+                data=output.getvalue(),
+                file_name="centros_filtrados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="btn_export_excel"
+            )
+        except Exception as e:
+            st.error(f"Error al exportar a Excel: {e}")
+
     st.title(f"Panel de Administrador")
-    
     tab_list = [
         "📊 Dashboard",
         "🔎 Buscador de Centros",
@@ -80,7 +99,6 @@ def show_ui(df_centros):
         "👤 Gestión de Usuarios",
         "📋 Revisión de Envíos"
     ]
-    
     tab_dashboard, tab_buscador, tab_creator, tab_areas, tab_users, tab_review = st.tabs(tab_list)
 
     # --- 1. DASHBOARD ---
