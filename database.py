@@ -57,39 +57,42 @@ import os
 
 # --- CONEXIÓN PRINCIPAL ---
 
-@st.cache_resource
 def get_db_connection():
     """
-    Se conecta a la base de datos Postgres.
-    Intenta leer de st.secrets primero, luego de variables de entorno.
+    Crea y devuelve una nueva conexión a la base de datos Postgres en cada llamada.
+    Esto evita devolver conexiones cacheadas que pueden cerrarse entre ejecuciones
+    (causando psycopg2.InterfaceError). Si no se encuentra la URL de la BD,
+    devuelve `None` y muestra un aviso.
     """
     db_url = None
-    
+
     # 1. Intentar leer de secretos de Streamlit (cuando la app corre)
     try:
         if "DB_URL" in st.secrets:
             db_url = st.secrets["DB_URL"]
     except Exception:
-        pass # st.secrets no existe en el script init_db
-    
-    # 2. Si falla, intentar leer de variables de entorno (para init_db.py)
+        pass
+
+    # 2. Si falla, intentar leer de variables de entorno (para scripts)
     if not db_url:
         db_url = os.environ.get("DB_URL")
 
     if not db_url:
-        # Si no hay DB_URL, no abortamos la ejecución de la app.
-        # En lugar de detener la app, devolvemos None y el resto
-        # de funciones manejarán la ausencia de conexión de forma segura.
         try:
             st.warning("⚠️ Aviso: No se encontró DB_URL en secrets.toml ni en variables de entorno. Algunas funcionalidades dependerán de la base de datos y estarán deshabilitadas.")
         except Exception:
-            # En contextos fuera de Streamlit (scripts) st.warning puede fallar
             print("⚠️ Aviso: No se encontró DB_URL en secrets.toml ni en variables de entorno.")
         return None
 
-    # Dejamos que el error se propague si la conexión falla
-    conn = psycopg2.connect(db_url)
-    return conn
+    try:
+        conn = psycopg2.connect(db_url)
+        return conn
+    except Exception as e:
+        try:
+            st.error(f"Error conectando a la base de datos: {e}")
+        except Exception:
+            print(f"Error conectando a la base de datos: {e}")
+        return None
 
 # --- INICIALIZACIÓN ---
 

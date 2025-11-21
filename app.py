@@ -117,6 +117,11 @@ def login_form():
         password = st.text_input("Contraseña", type="password")
         submit = st.form_submit_button("Iniciar sesión")
     if submit:
+        # Verificar conexión a la base de datos antes de intentar autenticar
+        conn_test = database.get_db_connection()
+        if conn_test is None:
+            st.error("Error: no hay conexión a la base de datos. Revisa la variable DB_URL o la configuración de la BD.")
+            return
         user = database.get_user(username)
         if user and auth.check_password(password, user["password_hash"]):
             st.session_state["user_id"] = user["id"]
