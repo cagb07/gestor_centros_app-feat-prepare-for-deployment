@@ -4,6 +4,13 @@ import pandas as pd
 import database
 import auth
 
+# Configuración de la página (debe ejecutarse antes de otros comandos de Streamlit)
+try:
+    st.set_page_config(page_title="Gestor de Centros Educativos", layout="wide")
+except Exception:
+    # Si ya se llamó anteriormente, ignorar el error
+    pass
+
 # --- APLICACIÓN PRINCIPAL (POST-LOGIN) ---
 def main_app():
     # --- Cierre de sesión por inactividad ---
@@ -36,15 +43,47 @@ def main_app():
     # Configurar la barra lateral
     st.sidebar.title(f"Hola, {st.session_state.get('full_name', 'Usuario')}")
     st.sidebar.caption(f"Rol: {st.session_state.get('role', 'desconocido').capitalize()}")
+
     # Selector de tema visual
     theme = st.sidebar.radio("Tema visual", ["Claro", "Oscuro"], index=0, key="theme_selector")
-    if theme == "Oscuro":
-        st.markdown("""
+
+    def apply_theme_css(selected_theme: str):
+        """Aplica CSS que fuerza estilos para tema claro u oscuro.
+        Usamos selectores generales y !important para sobreescribir estilos de Streamlit.
+        """
+        if selected_theme == "Oscuro":
+            css = """
             <style>
-            body, .stApp { background-color: #222 !important; color: #eee !important; }
-            /* ...estilos personalizados... */
+            :root { color-scheme: dark; }
+            /* Áreas principales */
+            .stApp, .main, .block-container, .css-1d391kg { background-color: #111 !important; color: #e6e6e6 !important; }
+            /* Sidebar */
+            .css-1d391kg, .css-1v3fvcr { background-color: #0f0f0f !important; color: #e6e6e6 !important; }
+            /* Texto y títulos */
+            .stText, .stMarkdown, .stHeader, h1, h2, h3, h4 { color: #e6e6e6 !important; }
+            /* Botones */
+            button, .stButton>button { background-color:#333 !important; color:#fff !important; }
+            /* Tablas */
+            table { color: #e6e6e6 !important; }
             </style>
-        """, unsafe_allow_html=True)
+            """
+        else:
+            css = """
+            <style>
+            :root { color-scheme: light; }
+            .stApp, .main, .block-container, .css-1d391kg { background-color: #ffffff !important; color: #111 !important; }
+            .css-1d391kg, .css-1v3fvcr { background-color: #ffffff !important; color: #111 !important; }
+            button, .stButton>button { background-color: initial !important; color: initial !important; }
+            </style>
+            """
+        st.markdown(css, unsafe_allow_html=True)
+
+    # Aplicar el CSS del tema seleccionado
+    try:
+        apply_theme_css(theme)
+    except Exception:
+        # No crítico; continuar sin bloquear la app
+        pass
 
     # Navegación rápida entre vistas principales
     st.sidebar.markdown("---")
