@@ -73,99 +73,6 @@ def get_db_connection():
 # --- INICIALIZACIÓN ---
 
 def create_tables():
-                            # Tabla de Centros Educativos
-                            cur.execute("""
-                                CREATE TABLE IF NOT EXISTS centros (
-                                    id SERIAL PRIMARY KEY,
-                                    codigo VARCHAR(20) UNIQUE,
-                                    nombre VARCHAR(255) NOT NULL,
-                                    provincia VARCHAR(100),
-                                    otros_campos JSONB
-                                );
-                            """)
-                # --- CRUD CENTROS EDUCATIVOS ---
-                def get_all_centros():
-                    conn = get_db_connection()
-                    if not conn:
-                        return pd.DataFrame()
-                    df = pd.read_sql("SELECT * FROM centros ORDER BY nombre", conn)
-                    return df
-
-                def add_centro(codigo, nombre, provincia, otros_campos=None):
-                    conn = get_db_connection()
-                    if not conn:
-                        return False, "No hay conexión a la base de datos."
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                "INSERT INTO centros (codigo, nombre, provincia, otros_campos) VALUES (%s, %s, %s, %s)",
-                                (codigo, nombre, provincia, json.dumps(otros_campos) if otros_campos else None)
-                            )
-                        conn.commit()
-                        return True, "Centro agregado."
-                    except Exception as e:
-                        conn.rollback()
-                        return False, f"Error al agregar centro: {e}"
-
-                def update_centro(centro_id, nombre=None, provincia=None, otros_campos=None):
-                    conn = get_db_connection()
-                    if not conn:
-                        return False, "No hay conexión a la base de datos."
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                "UPDATE centros SET nombre = COALESCE(%s, nombre), provincia = COALESCE(%s, provincia), otros_campos = COALESCE(%s, otros_campos) WHERE id = %s",
-                                (nombre, provincia, json.dumps(otros_campos) if otros_campos else None, centro_id)
-                            )
-                        conn.commit()
-                        return True, "Centro actualizado."
-                    except Exception as e:
-                        conn.rollback()
-                        return False, f"Error al actualizar centro: {e}"
-
-                def delete_centro(centro_id):
-                    conn = get_db_connection()
-                    if not conn:
-                        return False, "No hay conexión a la base de datos."
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute("DELETE FROM centros WHERE id = %s", (centro_id,))
-                        conn.commit()
-                        return True, "Centro eliminado."
-                    except Exception as e:
-                        conn.rollback()
-                        return False, f"Error al eliminar centro: {e}"
-                # Tabla de auditoría
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS auditoria (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER REFERENCES usuarios(id),
-                        accion VARCHAR(100) NOT NULL,
-                        detalle TEXT,
-                        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-    def registrar_auditoria(user_id, accion, detalle=None):
-        conn = get_db_connection()
-        if not conn:
-            return
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO auditoria (user_id, accion, detalle) VALUES (%s, %s, %s)",
-                    (user_id, accion, detalle)
-                )
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            print(f"Error registrando auditoría: {e}")
-
-    def obtener_auditoria():
-        conn = get_db_connection()
-        if not conn:
-            return pd.DataFrame(columns=["id", "user_id", "accion", "detalle", "fecha"])
-        df = pd.read_sql("SELECT a.*, u.username, u.full_name FROM auditoria a LEFT JOIN usuarios u ON a.user_id = u.id ORDER BY fecha DESC", conn)
-        return df
     """Crea todas las tablas de la app si no existen."""
     conn = get_db_connection()
     if not conn:
@@ -174,6 +81,26 @@ def create_tables():
 
     try:
         with conn.cursor() as cur:
+            # Tabla de Centros Educativos
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS centros (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(20) UNIQUE,
+                    nombre VARCHAR(255) NOT NULL,
+                    provincia VARCHAR(100),
+                    otros_campos JSONB
+                );
+            """)
+            # Tabla de auditoría
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auditoria (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES usuarios(id),
+                    accion VARCHAR(100) NOT NULL,
+                    detalle TEXT,
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
             # Tabla de Áreas
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS form_areas (
