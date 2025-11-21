@@ -392,6 +392,32 @@ def show_ui(df_centros):
                     st.session_state.centro_adjunto = datos_centro_seleccionado.to_dict()
                     st.success(f"¡{centro_para_adjuntar} adjuntado!")
                     st.info("Ahora vaya a la pestaña 'Llenar Formulario' para ver la información pre-llenada.")
+                    # Intentar poblar automáticamente los keys del formulario en session_state
+                    try:
+                        centro_dict = datos_centro_seleccionado.to_dict()
+                        # Invertir el mapeo CSV->FORM para obtener FORM->CSV
+                        FORM_TO_CSV_MAP = {v: k for k, v in CSV_TO_FORM_MAP.items()}
+                        # Mapa auxiliar de claves del centro en mayúsculas -> original
+                        centro_keys_upper = {str(k).upper(): k for k in centro_dict.keys()}
+                        for form_label, csv_col in FORM_TO_CSV_MAP.items():
+                            if not csv_col:
+                                continue
+                            try:
+                                csv_col_upper = str(csv_col).upper()
+                                if csv_col_upper in centro_keys_upper:
+                                    orig_key = centro_keys_upper[csv_col_upper]
+                                    val = centro_dict.get(orig_key)
+                                    if val is not None:
+                                        sess_key = f"form_field_{form_label.replace(' ', '_')}"
+                                        # Only set if not already present to avoid overwriting user edits
+                                        if sess_key not in st.session_state:
+                                            st.session_state[sess_key] = val
+                            except Exception:
+                                continue
+                    except Exception:
+                        pass
+                    # Forzar rerun para que la pestaña de formulario recoja el centro adjunto y se prellene
+                    st.rerun()
                 except Exception:
                     st.error("No se pudo adjuntar el centro seleccionado. Revisa el nombre o el CSV de centros.")
             else:
@@ -542,11 +568,22 @@ def show_ui(df_centros):
                                                 st.info("Modal cerrado por el usuario.")
                                             else:
                                                 try:
-                                                    lat = float(gps_payload.get('lat'))
-                                                    lng = float(gps_payload.get('lng'))
-                                                    gps_coords = {'lat': lat, 'lng': lng}
-                                                    st.session_state[gps_session_key] = gps_coords
-                                                    st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
+                                                        lat = float(gps_payload.get('lat'))
+                                                        lng = float(gps_payload.get('lng'))
+                                                        # Guardar con precisión de 6 decimales
+                                                        lat = round(float(lat), 6)
+                                                        lng = round(float(lng), 6)
+                                                        gps_coords = {'lat': lat, 'lng': lng}
+                                                        st.session_state[gps_session_key] = gps_coords
+                                                        # También guardar en map_click para mostrar marcador inmediatamente
+                                                        try:
+                                                            map_click_key = f"{field_key}_map_click"
+                                                            st.session_state[map_click_key] = gps_coords
+                                                        except Exception:
+                                                            pass
+                                                        st.success(f"✅ Ubicación detectada: {gps_coords['lat']:.6f}, {gps_coords['lng']:.6f}")
+                                                        # Forzar rerun para que el mapa y el formulario muestren la nueva coordenada
+                                                        st.rerun()
                                                 except Exception as e:
                                                     st.error(f"La respuesta del modal no contiene lat/lng válidos: {e}")
                                         else:
