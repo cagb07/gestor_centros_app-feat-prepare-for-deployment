@@ -106,60 +106,8 @@ def main_app():
         """, unsafe_allow_html=True)
 
     # Navegación rápida entre vistas principales
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("## Navegación rápida")
-    nav_option = st.sidebar.radio(
-        "Ir a sección:",
-        ["Dashboard", "Buscador de Centros", "Creador de Formularios", "Gestión de Áreas", "Gestión de Usuarios", "Revisión de Envíos"],
-        key="nav_selector"
-    )
-    # Guardar la opción seleccionada en session_state para usar en las tabs
-    st.session_state["nav_selected"] = nav_option
+                </style>
+            """, unsafe_allow_html=True)
 
-    # Cargar los datos del CSV (solo lectura)
-    @st.cache_data
-    def load_csv_data(file_path):
-        """Carga el archivo CSV de centros educativos con manejo de errores y codificaciones."""
-        try:
-            return pd.read_csv(file_path, encoding='utf-8')
-        except UnicodeDecodeError:
-            try:
-                return pd.read_csv(file_path, encoding='latin-1')
-            except Exception as e:
-                st.error(f"Error al leer el CSV con codificaciones alternativas: {e}")
-                st.info("Verifica que el archivo no esté corrupto.")
-                return pd.DataFrame()
-        except FileNotFoundError:
-            st.error(f"Error: No se encontró el archivo {file_path}")
-            st.info("Asegúrate de que 'datos_centros.csv' esté en la carpeta principal del proyecto.")
-            return pd.DataFrame()
-        except Exception as e:
-            st.error(f"Error inesperado al leer el CSV: {e}")
-            st.info("Verifica que el archivo no esté corrupto.")
-            return pd.DataFrame()
-
-    with st.spinner("Cargando datos de centros educativos..."):
-        df_centros = load_csv_data("datos_centros.csv")
-
-    # Si el DataFrame está vacío después de intentar cargarlo, detenemos la app.
-    if df_centros.empty:
-        st.warning("No se pudieron cargar los datos de los centros educativos. La app no puede continuar.")
-        st.stop()
-
-    # --- ENRUTADOR POR ROL ---
-    # Muestra la interfaz correspondiente al rol del usuario
-    if st.session_state["role"] == "admin":
-        if admin_view:
-            admin_view.show_ui(df_centros)
-    elif st.session_state["role"] == "operador":
-        if operator_view:
-            operator_view.show_ui(df_centros)
-
-# --- PUNTO DE ENTRADA PRINCIPAL ---
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-
-if st.session_state["logged_in"]:
-    main_app()
-else:
-    login_screen()
+        # Navegación rápida entre vistas principales
+        st.sidebar.markdown("---")
