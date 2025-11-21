@@ -67,18 +67,9 @@ def main_app():
                 st.warning("Sesión cerrada por inactividad. Por favor, inicie sesión nuevamente.")
                 st.stop()
             st.session_state["last_active"] = now
-        """
-        Lógica principal de la aplicación tras el login.
-        """
         # Intentar importar las vistas de forma perezosa (evita fallos en import)
         def mostrar_error_importacion(vista, error):
             st.error(f"La vista de {vista} no está disponible debido a un error de importación: {error}. Revisa las dependencias.")
-        # ...resto del código..."""
-    Lógica principal de la aplicación tras el login.
-    """
-    # Intentar importar las vistas de forma perezosa (evita fallos en import)
-    def mostrar_error_importacion(vista, error):
-        st.error(f"La vista de {vista} no está disponible debido a un error de importación: {error}. Revisa las dependencias.")
 
     try:
         import admin_view
