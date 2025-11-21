@@ -85,14 +85,14 @@ def login_form():
             st.session_state["full_name"] = user["full_name"]
             st.session_state["role"] = user["role"]
             st.success("¡Bienvenido, {}!".format(user["full_name"]))
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Usuario o contraseña incorrectos.")
 
 def logout_button():
     if st.sidebar.button("Cerrar sesión", key="logout_btn"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 
 # --- PUNTO DE ENTRADA DE LA APP ---
